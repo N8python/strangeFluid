@@ -276,6 +276,11 @@ const instanceMeshMatrixArray = instancedMesh.instanceMatrix.array;
 
 const worker = new Worker('worker.js');
 
+let lastDeltaTime = 0;
+let lastMouseX = 0;
+let lastMouseY = 0;
+let lastMouseDown = false;
+
 worker.onmessage = function(e) {
     const updatedSpheres = e.data;
     for (let i = 0; i < numSpheres; i++) {
@@ -285,22 +290,27 @@ worker.onmessage = function(e) {
         instanceMeshMatrixArray[xCoord + 1] = height / 2 - updatedSpheres[index + Y];
     }
     instancedMesh.instanceMatrix.needsUpdate = true;
+
+    // Send the next message to the worker
+    worker.postMessage({
+        deltaTime: lastDeltaTime,
+        mouseX: lastMouseX,
+        mouseY: lastMouseY,
+        mouseDown: lastMouseDown,
+        width,
+        height
+    });
 };
 
 function animate() {
     stats.update();
-    let deltaTime = (performance.now() - time) / 1000;
+    lastDeltaTime = (performance.now() - time) / 1000;
     time = performance.now();
-    deltaTime = Math.min(deltaTime, 0.016);
+    lastDeltaTime = Math.min(lastDeltaTime, 0.016);
 
-    worker.postMessage({
-        deltaTime,
-        mouseX,
-        mouseY,
-        mouseDown,
-        width,
-        height
-    });
+    lastMouseX = mouseX;
+    lastMouseY = mouseY;
+    lastMouseDown = mouseDown;
 
     composer.render();
     requestAnimationFrame(animate);
