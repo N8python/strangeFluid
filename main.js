@@ -203,6 +203,14 @@ function init() {
         gravity,
         restitution
     });
+    worker.postMessage({
+        deltaTime: 0,
+        mouseX: 0,
+        mouseY: 0,
+        mouseDown: false,
+        width: window.innerWidth,
+        height: window.innerHeight
+    });
 }
 
 function resolveCollision(sphere1, sphere2) {
