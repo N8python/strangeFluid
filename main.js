@@ -166,8 +166,6 @@ const dummy = new THREE.Object3D();
 function init() {
     for (let i = 0; i < numSpheres; i++) {
         const index = i * sphereFields;
-        //spheres[index + X] = sphereRadius + Math.random() * (window.innerWidth - 2 * sphereRadius);
-        //spheres[index + Y] = sphereRadius + Math.random() * (window.innerHeight - 2 * sphereRadius);
         spheres[index + X] = 4 * sphereRadius + (4 * sphereRadius * i) % (window.innerWidth - 8 * sphereRadius) + sphereRadius * (Math.random() - 0.5);
         spheres[index + Y] = 100 + Math.floor((4 * sphereRadius * i) / (window.innerWidth - 8 * sphereRadius)) * 2 * sphereRadius + sphereRadius * (Math.random() - 0.5);
         spheres[index + OLD_X] = spheres[index + X];
@@ -182,6 +180,29 @@ function init() {
         instancedMesh.setMatrixAt(i, dummy.matrix);
     }
     instancedMesh.instanceMatrix.needsUpdate = true;
+
+    // Initialize worker
+    worker.postMessage({
+        init: true,
+        spheres,
+        grid,
+        nextInCell,
+        numSpheres,
+        sphereFields,
+        X,
+        Y,
+        OLD_X,
+        OLD_Y,
+        gridWidth,
+        gridHeight,
+        maxParticlesPerCell,
+        sphereRadius,
+        cellSize,
+        sumOfRadiiSquared,
+        invCellSize,
+        gravity,
+        restitution
+    });
 }
 
 function resolveCollision(sphere1, sphere2) {
@@ -253,149 +274,34 @@ let width = window.innerWidth;
 const matrix = new THREE.Matrix4();
 const instanceMeshMatrixArray = instancedMesh.instanceMatrix.array;
 
+const worker = new Worker('worker.js');
+
+worker.onmessage = function(e) {
+    const updatedSpheres = e.data;
+    for (let i = 0; i < numSpheres; i++) {
+        const index = i * sphereFields;
+        const xCoord = i * 16 + 12;
+        instanceMeshMatrixArray[xCoord] = updatedSpheres[index + X] - width / 2;
+        instanceMeshMatrixArray[xCoord + 1] = height / 2 - updatedSpheres[index + Y];
+    }
+    instancedMesh.instanceMatrix.needsUpdate = true;
+};
+
 function animate() {
     stats.update();
     let deltaTime = (performance.now() - time) / 1000;
     time = performance.now();
     deltaTime = Math.min(deltaTime, 0.016);
-    let timeSquared = deltaTime * deltaTime;
-    let stepTime = deltaTime / STEPS;
-    const halfWidth = width / 2;
-    const halfHeight = height / 2;
-    const gravMult = 0.5 * gravity * stepTime * stepTime;
-    const lerpFactor = Math.pow(0.999, stepTime / 0.002);
 
-    for (let step = 0; step < STEPS; step++) {
-        let reverse = step % 2 == 0;
-        /* for (let gy = 0; gy < gridHeight; gy++) {
-             for (let gx = 0; gx < gridWidth; gx++) {*/
+    worker.postMessage({
+        deltaTime,
+        mouseX,
+        mouseY,
+        mouseDown,
+        width,
+        height
+    });
 
-        for (let gy = reverse ? gridHeight - 1 : 0; reverse ? gy >= 0 : gy < gridHeight; reverse ? gy-- : gy++) {
-            for (let gx = reverse ? gridWidth - 1 : 0; reverse ? gx >= 0 : gx < gridWidth; reverse ? gx-- : gx++) {
-
-                const baseGridIndex = (gy * gridWidth + gx) * maxParticlesPerCell;
-                const particlesInBaseCell = nextInCell[gy * gridWidth + gx];
-
-                // Check collisions within the cell
-                for (let idx1 = 0; idx1 < particlesInBaseCell; idx1++) {
-                    const sphere1 = grid[baseGridIndex + idx1];
-
-                    // Check collisions with other spheres in the same cell
-                    for (let idx2 = idx1 + 1; idx2 < particlesInBaseCell; idx2++) {
-                        const sphere2 = grid[baseGridIndex + idx2];
-                        resolveCollision(sphere1, sphere2);
-                    }
-
-                    // Check collisions with spheres in adjacent cells
-                    const startX = Math.max(gx - 1, 0);
-                    const endX = Math.min(gx + 1, gridWidth - 1);
-                    const startY = Math.max(gy - 1, 0);
-                    const endY = Math.min(gy + 1, gridHeight - 1);
-
-                    for (let adjY = startY; adjY <= endY; adjY++) {
-                        for (let adjX = startX; adjX <= endX; adjX++) {
-                            if (adjX == gx && adjY == gy) {
-                                continue; // Skip the base cell as it's already handled
-                            }
-
-                            const adjGridIndex = (adjY * gridWidth + adjX) * maxParticlesPerCell;
-                            const particlesInAdjCell = nextInCell[adjY * gridWidth + adjX];
-
-                            for (let idxAdj = 0; idxAdj < particlesInAdjCell; idxAdj++) {
-                                const sphere2 = grid[adjGridIndex + idxAdj];
-                                resolveCollision(sphere1, sphere2);
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        grid.fill(0);
-        nextInCell.fill(0);
-
-        for (let i = 0; i < numSpheres; i++) {
-            const index = i * sphereFields;
-            const xIndex = index + X;
-            const yIndex = index + Y;
-            const oldXIndex = index + OLD_X;
-            const oldYIndex = index + OLD_Y;
-            const currX = spheres[xIndex];
-            const currY = spheres[yIndex];
-            const oldX = spheres[oldXIndex];
-            const oldY = spheres[oldYIndex];
-            const xDiff = currX - oldX;
-            const yDiff = currY - oldY;
-            let newX = currX + xDiff;
-            let newY = currY + yDiff + gravMult;
-
-
-            if (newX - sphereRadius <= 0) {
-                newX = sphereRadius - xDiff * restitution;
-            }
-            if (newX + sphereRadius >= width) {
-                newX = width - sphereRadius + xDiff * restitution;
-            }
-            if (newY - sphereRadius <= 0) {
-                newY = sphereRadius - yDiff * restitution;
-            }
-            if (newY + sphereRadius >= height) {
-                newY = height - sphereRadius + yDiff * restitution;
-            }
-            // Attract to mouse
-            if (mouseDown) {
-                let dx = mouseX - spheres[index + X];
-                let dy = mouseY - spheres[index + Y];
-                let distance = (dx * dx + dy * dy);
-                if (distance < 40000) {
-                    distance = Math.sqrt(distance);
-                    const force = 0.01 * (200 - distance);
-                    dx /= distance;
-                    dy /= distance;
-                    newX += dx * force * deltaTime;
-                    newY += dy * force * deltaTime;
-
-                }
-            }
-
-            spheres[oldXIndex] = currX;
-            spheres[oldYIndex] = currY;
-            const finalX = newX * lerpFactor + currX * (1 - lerpFactor);
-            const finalY = newY * lerpFactor + currY * (1 - lerpFactor);
-            spheres[xIndex] = finalX;
-            spheres[yIndex] = finalY;
-
-            // Update grid
-            const gridX = (finalX * invCellSize) | 0;
-            const gridY = (finalY * invCellSize) | 0;
-            const gridXY = gridY * gridWidth + gridX;
-            const gridIndex = gridXY * maxParticlesPerCell;
-            const nextSlot = nextInCell[gridXY]++;
-            if (nextSlot < maxParticlesPerCell) {
-                grid[gridIndex + nextSlot] = i;
-            }
-            if (step == STEPS - 1) {
-                const xCoord = i * 16 + 12;
-                instanceMeshMatrixArray[xCoord] = finalX - halfWidth;
-                instanceMeshMatrixArray[xCoord + 1] = halfHeight - finalY;
-            }
-        }
-
-
-    }
-
-    // Update instanced mesh
-    /*for (let i = 0; i < numSpheres; i++) {
-        const index = i * sphereFields;
-        dummy.position.set(
-            spheres[index + X] - window.innerWidth / 2,
-            window.innerHeight / 2 - spheres[index + Y],
-            0
-        );
-        dummy.updateMatrix();
-        instancedMesh.setMatrixAt(i, dummy.matrix);
-    }*/
-
-    instancedMesh.instanceMatrix.needsUpdate = true;
     composer.render();
     requestAnimationFrame(animate);
     document.getElementById('pCount').innerText = `Particle Count: ${numSpheres}`;
