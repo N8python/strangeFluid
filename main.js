@@ -288,8 +288,14 @@ let lastDeltaTime = 0;
 let lastMouseX = 0;
 let lastMouseY = 0;
 let lastMouseDown = false;
+let lastPhysicsTime = performance.now();
+let physicsHz = 0;
 
 worker.onmessage = function(e) {
+    const currentTime = performance.now();
+    const timeSinceLastPhysics = currentTime - lastPhysicsTime;
+    physicsHz = 1000 / timeSinceLastPhysics;
+    lastPhysicsTime = currentTime;
     const updatedSpheres = e.data;
     for (let i = 0; i < numSpheres; i++) {
         const index = i * sphereFields;
@@ -323,6 +329,7 @@ function animate() {
     composer.render();
     requestAnimationFrame(animate);
     document.getElementById('pCount').innerText = `Particle Count: ${numSpheres}`;
+    document.getElementById('physicsHz').innerText = `Physics Hz: ${physicsHz.toFixed(2)}`;
 }
 
 init();
