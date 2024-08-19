@@ -16,12 +16,26 @@
             padding: 0;
             margin: 0;
         }
+        
+        #pCount {
+            color: white;
+            font-size: 20px;
+            position: absolute;
+            margin: 0px;
+            top: 10px;
+            right: 10px;
+        }
     </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pixi.js/7.2.4/pixi.min.js"></script>
 </head>
 
 <body>
-    <canvas id="canvas" width="800" height="600"></canvas>
-    <script type="module" src="main.js"></script>
+    <script type="importmap">
+        { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.167.0/build/three.module.js", "three/examples/": "https://cdn.jsdelivr.net/npm/three@0.167.0/examples/", "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.167.0/examples/jsm/", "postprocessing":
+        "https://cdn.jsdelivr.net/npm/postprocessing@6.36.0/build/index.js"} }
+    </script>
+    <p id="pCount">Particle Count: 0</p>
+    <script async type="module" src="main.js"></script>
 </body>
 
 </html>
