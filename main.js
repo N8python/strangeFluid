@@ -304,7 +304,7 @@ let messageStartTime = null; //performance.now();
 let messageEndTime = null;
 
 function physics() {
-    if (!physicsDone) {
+    if (!physicsDone || performance.now() - physicsTime < (1000 / maxPhysicsHz) - 2) {
         return;
     }
     const delta = Math.min((performance.now() - physicsTime) / 1000, 1 / maxPhysicsHz);
@@ -322,7 +322,7 @@ function physics() {
 }
 init();
 animate();
-setInterval(physics, 1000 / maxPhysicsHz);
+setInterval(physics, 1);
 /*window.addEventListener('resize', () => {
     height = window.innerHeight;
     width = window.innerWidth;
