@@ -1,5 +1,3 @@
-importScripts('three.min.js');
-
 let spheres, grid, nextInCell;
 let numSpheres, sphereFields, X, Y, OLD_X, OLD_Y;
 let gridWidth, gridHeight, maxParticlesPerCell;
@@ -75,7 +73,7 @@ function resolveCollision(sphere1, sphere2) {
 }
 
 function runPhysics(deltaTime, mouseX, mouseY, mouseDown, width, height) {
-    const STEPS = 4;
+    const STEPS = 8;
     let stepTime = deltaTime / STEPS;
     const gravMult = 0.5 * gravity * stepTime * stepTime;
     const lerpFactor = Math.pow(0.999, stepTime / 0.002);
@@ -162,8 +160,8 @@ function runPhysics(deltaTime, mouseX, mouseY, mouseDown, width, height) {
                     const force = 0.01 * (200 - distance);
                     dx /= distance;
                     dy /= distance;
-                    newX += dx * force * deltaTime;
-                    newY += dy * force * deltaTime;
+                    newX += dx * force * stepTime * 4.0;
+                    newY += dy * force * stepTime * 4.0;
                 }
             }
 

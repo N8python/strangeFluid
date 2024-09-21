@@ -24,6 +24,27 @@
             margin: 0px;
             top: 10px;
             right: 10px;
+            user-select: none;
+        }
+        
+        #physicsHz {
+            color: white;
+            font-size: 20px;
+            position: absolute;
+            margin: 0px;
+            top: 30px;
+            right: 10px;
+            user-select: none;
+        }
+        
+        #physicsTime {
+            color: white;
+            font-size: 20px;
+            position: absolute;
+            margin: 0px;
+            top: 70px;
+            right: 10px;
+            user-select: none;
         }
     </style>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pixi.js/7.2.4/pixi.min.js"></script>
@@ -36,6 +57,7 @@
     </script>
     <p id="pCount">Particle Count: 0</p>
     <p id="physicsHz" style="top: 40px;">Physics Hz: 0</p>
+    <p id="physicsTime">Physics Time: 0</p>
     <script async type="module" src="main.js"></script>
 </body>
 

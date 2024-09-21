@@ -22,7 +22,7 @@ const camera = new THREE.OrthographicCamera(
 );
 camera.position.z = 100;
 
-const numSpheres = 12 * window.innerWidth;
+const numSpheres = 6 * window.innerWidth;
 const gravity = 500;
 const restitution = 0.75;
 const dragCoefficient = 0.1;
@@ -38,7 +38,7 @@ const sphereRadius = 2.5;
 const cellSize = 2 * sphereRadius;
 const sumOfRadiiSquared = cellSize * cellSize;
 const invCellSize = 1 / cellSize;
-const maxParticlesPerCell = 4;
+const maxParticlesPerCell = 8;
 const gridWidth = Math.ceil(window.innerWidth / cellSize);
 const gridHeight = Math.ceil(window.innerHeight / cellSize);
 const grid = new Uint32Array(gridWidth * gridHeight * maxParticlesPerCell);
@@ -94,25 +94,27 @@ const composer = new EffectComposer(renderer, new THREE.WebGLRenderTarget(window
 }));
 
 composer.addPass(new RenderPass(scene, camera));
+const blurFactor = 0.5;
 const hblur = new ShaderPass(HorizontalBlurShader);
 const vblur = new ShaderPass(VerticalBlurShader);
-hblur.uniforms.h.value = 4 / window.innerWidth;
-vblur.uniforms.v.value = 4 / window.innerHeight;
+hblur.uniforms.h.value = 4 / window.innerWidth * blurFactor;
+vblur.uniforms.v.value = 4 / window.innerHeight * blurFactor;
 const hblur2 = new ShaderPass(HorizontalBlurShader);
 const vblur2 = new ShaderPass(VerticalBlurShader);
-hblur2.uniforms.h.value = 1 / window.innerWidth;
-vblur2.uniforms.v.value = 1 / window.innerHeight;
+hblur2.uniforms.h.value = 1 / window.innerWidth * blurFactor;
+vblur2.uniforms.v.value = 1 / window.innerHeight * blurFactor;
 composer.addPass(hblur);
 composer.addPass(vblur);
 composer.addPass(hblur2);
 composer.addPass(vblur2);
-
-composer.addPass(new ShaderPass({
+const finalPass = new ShaderPass({
     uniforms: {
         tDiffuse: { value: null },
-        resolution: { value: new THREE.Vector2(window.innerWidth, window.innerHeight) }
+        resolution: { value: new THREE.Vector2(window.innerWidth, window.innerHeight) },
+        time: { value: 0 }
     },
     vertexShader: /*glsl*/ `
+
         varying vec2 vUv;
         void main() {
             vUv = uv;
@@ -121,6 +123,7 @@ composer.addPass(new ShaderPass({
     `,
     fragmentShader: /*glsl*/ `
         uniform sampler2D tDiffuse;
+        uniform float time;
         uniform vec2 resolution;
         varying vec2 vUv;
         vec3 rgb2hsv(vec3 c)
@@ -144,6 +147,7 @@ vec3 hsv2rgb(vec3 c)
             // Sample
             vec2 texelSize = 1.0 / resolution;
             vec4 color = texture2D(tDiffuse, vUv);
+            //color.r += time * 0.1;
             /*if (color.a > 0.5) {
                 gl_FragColor = color;
             } else {
@@ -153,7 +157,8 @@ vec3 hsv2rgb(vec3 c)
       
         }
     `
-}));
+});
+composer.addPass(finalPass);
 const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 1.5, 0.4, 0.85);
 bloomPass.threshold = 0.2;
 bloomPass.strength = 2;
@@ -213,48 +218,7 @@ function init() {
     });
 }
 
-function resolveCollision(sphere1, sphere2) {
-    const sphere1Accessor = sphere1 * sphereFields;
-    const sphere2Accessor = sphere2 * sphereFields;
-    const sphere1XIndex = sphere1Accessor + X;
-    const sphere1YIndex = sphere1Accessor + Y;
-    const sphere2XIndex = sphere2Accessor + X;
-    const sphere2YIndex = sphere2Accessor + Y;
-    const sphere1X = spheres[sphere1XIndex];
-    const sphere1Y = spheres[sphere1YIndex];
-    const sphere2X = spheres[sphere2XIndex];
-    const sphere2Y = spheres[sphere2YIndex];
-    const xDist = sphere2X - sphere1X;
-    const yDist = sphere2Y - sphere1Y;
-    let distance = (xDist * xDist + yDist * yDist);
-    if (distance < sumOfRadiiSquared) {
-        distance = Math.sqrt(distance);
-        const overlap = 0.5 * (cellSize - distance);
-        const normalX = overlap * xDist / distance;
-        const normalY = overlap * yDist / distance;
-        spheres[sphere1XIndex] = sphere1X - normalX;
-        spheres[sphere1YIndex] = sphere1Y - normalY;
-        spheres[sphere2XIndex] = sphere2X + normalX;
-        spheres[sphere2YIndex] = sphere2Y + normalY;
-    } else {
-        // Move the spheres towards each other
-        distance = Math.sqrt(distance);
-        const overlap = 0.5 * (cellSize - distance);
-        const normalX = overlap * xDist / distance;
-        const normalY = overlap * yDist / distance;
-        const invDistance = 1.0 / (100 * (distance + 0.1));
-        spheres[sphere1XIndex] = sphere1X - invDistance * normalX;
-        spheres[sphere1YIndex] = sphere1Y - invDistance * normalY;
-        spheres[sphere2XIndex] = sphere2X + invDistance * normalX;
-        spheres[sphere2YIndex] = sphere2Y + invDistance * normalY;
-
-    }
-
-
-}
-
 let time = performance.now();
-const STEPS = 4;
 const stats = new Stats();
 document.body.appendChild(stats.dom);
 
@@ -291,19 +255,21 @@ let lastMouseDown = false;
 let lastPhysicsTime = performance.now();
 let physicsHzArray = [];
 const rollingAverageWindow = 60; // 1 second at 60 fps
-
+let averageHz = 0;
+const maxPhysicsHz = 60;
 worker.onmessage = function(e) {
+    messageEndTime = performance.now();
     const currentTime = performance.now();
     const timeSinceLastPhysics = currentTime - lastPhysicsTime;
     const instantHz = 1000 / timeSinceLastPhysics;
-    
+
     physicsHzArray.push(instantHz);
     if (physicsHzArray.length > rollingAverageWindow) {
         physicsHzArray.shift();
     }
-    
-    const averageHz = physicsHzArray.reduce((sum, hz) => sum + hz, 0) / physicsHzArray.length;
-    
+
+    averageHz = physicsHzArray.reduce((sum, hz) => sum + hz, 0) / physicsHzArray.length;
+
     lastPhysicsTime = currentTime;
     const updatedSpheres = e.data;
     for (let i = 0; i < numSpheres; i++) {
@@ -313,16 +279,8 @@ worker.onmessage = function(e) {
         instanceMeshMatrixArray[xCoord + 1] = height / 2 - updatedSpheres[index + Y];
     }
     instancedMesh.instanceMatrix.needsUpdate = true;
-
-    // Send the next message to the worker
-    worker.postMessage({
-        deltaTime: lastDeltaTime,
-        mouseX: lastMouseX,
-        mouseY: lastMouseY,
-        mouseDown: lastMouseDown,
-        width,
-        height
-    });
+    physicsDone = true;
+    document.getElementById('physicsTime').innerText = `Physics Time: ${(messageEndTime - messageStartTime).toFixed(2)}ms`;
 };
 
 function animate() {
@@ -334,16 +292,37 @@ function animate() {
     lastMouseX = mouseX;
     lastMouseY = mouseY;
     lastMouseDown = mouseDown;
-
+    finalPass.uniforms.time.value = performance.now() / 1000;
     composer.render();
     requestAnimationFrame(animate);
     document.getElementById('pCount').innerText = `Particle Count: ${numSpheres}`;
     document.getElementById('physicsHz').innerText = `Physics Hz: ${averageHz.toFixed(2)}`;
 }
+let physicsTime = performance.now();
+let physicsDone = true;
+let messageStartTime = null; //performance.now();
+let messageEndTime = null;
 
+function physics() {
+    if (!physicsDone) {
+        return;
+    }
+    const delta = Math.min((performance.now() - physicsTime) / 1000, 1 / maxPhysicsHz);
+    physicsDone = false;
+    messageStartTime = performance.now();
+    worker.postMessage({
+        deltaTime: delta,
+        mouseX: lastMouseX,
+        mouseY: lastMouseY,
+        mouseDown: lastMouseDown,
+        width,
+        height
+    });
+    physicsTime = performance.now();
+}
 init();
 animate();
-
+setInterval(physics, 1000 / maxPhysicsHz);
 /*window.addEventListener('resize', () => {
     height = window.innerHeight;
     width = window.innerWidth;
